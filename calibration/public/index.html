@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>calibration</title>
+    <style>
+        #imagePreview {
+            display: flex;
+            flex-wrap: wrap;
+        }
+        #imagePreview img {
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            margin: 5px;
+        }
+        #uploadForm {
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+</head>
+<body>
+    <h1>Camera Calibration</h1>
+    <form id="uploadForm">
+        <div>
+            <label for="chessboardSize">chessbord size (in form WxH):</label>
+            <input type="text" id="chessboardSize" name="chessboardSize" value="9x6">
+        </div>
+        <div>
+            <label for="squareSize">grid size (mm):</label>
+            <input type="number" id="squareSize" name="squareSize" value="20">
+        </div>
+        <div>
+            <input type="file" id="imageInput" accept="image/*" multiple>
+            <button type="button" id="addImages">add to list</button>   <button type="reset" id = "reset">reset</button> <button type="button" id = "clear">clear</button>
+        </div>
+        <div id="imagePreview"></div>
+        <button type="submit">calibration</button>
+
+    </form>
+    <div id="result">
+        <label for="camera_matrix"> camera_matrix: </label>
+        <div id = "camera_matrix"></div>
+        <label for="distortion_coefficients"> distortion_coefficients: </label>
+        <div id = "distortion_coefficients"></div>
+        <label for="processed_images"> processed images: </label>
+        <div id = "processed_images"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const imageInput = document.getElementById('imageInput');
+        const addImagesButton = document.getElementById('addImages');
+        const imagePreview = document.getElementById('imagePreview');
+        const formData = new FormData();
+        const clearButton = document.getElementById('clear');
+        const resetButton = document.getElementById('reset');
+
+        clearButton.addEventListener('click', () => {
+            imagePreview.innerHTML = '';
+        });
+
+        addImagesButton.addEventListener('click', () => {
+            const files = imageInput.files;
+            if (files.length === 0) {
+                alert('No file selected');
+                return; 
+            }
+            for (let file of files) {
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        imagePreview.appendChild(img);
+                    };
+                    reader.readAsDataURL(file);
+                    formData.append('images', file);
+                }
+            }
+            imageInput.value = ''; 
+        });
+
+        form.onsubmit = function(e) {
+            e.preventDefault();
+            formData.set('chessboardSize', document.getElementById('chessboardSize').value);
+            formData.set('squareSize', document.getElementById('squareSize').value);
+
+            if (!formData.has('images')) {
+                alert('No image selected');
+                return;
+            }
+           
+            fetch('/calibrate', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then((data) => {
+                //first get the result matrix; 
+                if (data.error) {
+                    alert("something went wrong, please refresh the page and try again" + data.error);
+                    return;
+                }
+                const camera_matrix = data.camera_matrix;
+                const distortion_coefficients = data.distortion_coefficients;
+                const processed_images = data.processed_images;
+                document.getElementById('camera_matrix').innerHTML = camera_matrix.toString();
+                document.getElementById('distortion_coefficients').innerHTML = distortion_coefficients;
+                //display the processed images
+                const processed_images_div = document.getElementById('processed_images');
+                processed_images_div.innerHTML = '';
+                //log the length of the processed images
+                console.log(processed_images.length);
+                for (let img of processed_images) {
+                    const processed_img = document.createElement('img');
+                    processed_img.src = "data:image/jpeg;base64," + img;
+                    processed_img.style.width = '100px';
+                    processed_img.style.height = '100px';
+                    processed_img.style.objectFit = 'cover';
+                    processed_images_div.appendChild(processed_img);
+                }
+                //clean the formdata
+                formData.delete('images');
+            })
+            .catch(error => console.error('Error:', error));
+        };
+    </script>
+</body>
+</html>
